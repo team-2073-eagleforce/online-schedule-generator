@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TBA Match Schedule CSV Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        .info-box {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #0c5460;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #007AFF;
+        }
+        
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #0056CC;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.loading {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .help-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .example {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TBA Match Schedule CSV Generator</h1>
+        
+        <div class="info-box">
+            <strong>📋 How it works:</strong> Enter your personal TBA API key and competition code. The tool will fetch match data directly from The Blue Alliance and generate a CSV file for download.
+        </div>
+        
+        <form id="csvForm">
+            <div class="form-group">
+                <label for="apiKey">The Blue Alliance API Key</label>
+                <input type="password" id="apiKey" name="apiKey" required placeholder="Enter your TBA API key">
+                <div class="help-text">Get your API key from <a href="https://www.thebluealliance.com/account" target="_blank">TBA Account Settings</a></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="eventKey">Competition Code (Event Key)</label>
+                <input type="text" id="eventKey" name="eventKey" required placeholder="e.g., 2024casd, 2024week1, 2024cmptx">
+                <div class="help-text">Format: {year}{region}{eventcode} - Find event keys on TBA event pages</div>
+            </div>
+            
+            <button type="submit" id="submitBtn">Generate CSV</button>
+        </form>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="example">
+            <strong>Example Event Keys:</strong><br>
+            • 2024casd - 2024 San Diego Regional<br>
+            • 2024week1 - 2024 Week 1 events<br>
+            • 2024cmptx - 2024 Championship (Texas)<br><br>
+            
+            <strong>Troubleshooting:</strong><br>
+            • If download fails, try refreshing the page<br>
+            • For CORS errors, try opening this page in an incognito window<br>
+            • Check that your API key is valid at <a href="https://www.thebluealliance.com/account" target="_blank">TBA Account</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://www.thebluealliance.com/api/v3';
+        
+        document.getElementById('csvForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const eventKey = document.getElementById('eventKey').value.trim();
+            const submitBtn = document.getElementById('submitBtn');
+            const status = document.getElementById('status');
+            
+            if (!apiKey || !eventKey) {
+                showStatus('Please fill in all fields', 'error');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            showStatus('Fetching match data from The Blue Alliance...', 'loading');
+            
+            try {
+                // Fetch matches for the event
+                showStatus('Making request to The Blue Alliance API...', 'loading');
+                
+                const response = await fetch(`${API_BASE}/event/${eventKey}/matches/simple`, {
+                    method: 'GET',
+                    headers: {
+                        'X-TBA-Auth-Key': apiKey,
+                        'Accept': 'application/json'
+                    },
+                    mode: 'cors'
+                });
+                
+                showStatus('Processing API response...', 'loading');
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error('Invalid API key - check your TBA API key');
+                    } else if (response.status === 404) {
+                        throw new Error('Event not found - check your competition code format (e.g., 2024casd)');
+                    } else if (response.status === 0) {
+                        throw new Error('CORS error - try the alternative download method below');
+                    } else {
+                        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                    }
+                }
+                
+                const matches = await response.json();
+                
+                if (!matches || matches.length === 0) {
+                    throw new Error('No matches found for this event');
+                }
+                
+                showStatus('Generating CSV...', 'loading');
+                
+                // Filter for qualification matches and sort by match number
+                const qualMatches = matches
+                    .filter(match => match.comp_level === 'qm')
+                    .sort((a, b) => a.match_number - b.match_number);
+                
+                if (qualMatches.length === 0) {
+                    throw new Error('No qualification matches found for this event');
+                }
+                
+                // Generate CSV content
+                const csvContent = generateCSV(qualMatches);
+                
+                // Create and download CSV file
+                downloadCSV(csvContent, `${eventKey}_matches.csv`);
+                
+                showStatus(`✅ Successfully generated CSV with ${qualMatches.length} matches! Check your downloads folder.`, 'success');
+                
+            } catch (error) {
+                console.error('Error details:', error);
+                if (error.message.includes('CORS')) {
+                    showStatus(`❌ CORS Error: ${error.message}. Try opening this page in a new tab or use a different browser.`, 'error');
+                } else {
+                    showStatus(`❌ Error: ${error.message}`, 'error');
+                }
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+        
+        function generateCSV(matches) {
+            // CSV header
+            let csv = 'Match #,Red 1,Red 2,Red 3,Blue 1,Blue 2,Blue 3\n';
+            
+            // Add each match
+            matches.forEach(match => {
+                const redTeams = match.alliances.red.team_keys.map(key => key.replace('frc', ''));
+                const blueTeams = match.alliances.blue.team_keys.map(key => key.replace('frc', ''));
+                
+                // Ensure we have exactly 3 teams per alliance (pad with empty strings if needed)
+                while (redTeams.length < 3) redTeams.push('');
+                while (blueTeams.length < 3) blueTeams.push('');
+                
+                const row = [
+                    match.match_number,
+                    ...redTeams.slice(0, 3),
+                    ...blueTeams.slice(0, 3)
+                ].join(',');
+                
+                csv += row + '\n';
+            });
+            
+            return csv;
+        }
+        
+        function downloadCSV(content, filename) {
+            // Create CSV blob with BOM for better Excel compatibility
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
+            
+            // Try modern approach first
+            if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+                // IE/Edge
+                window.navigator.msSaveOrOpenBlob(blob, filename);
+                return;
+            }
+            
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            
+            // Ensure link is added to DOM and clicked
+            document.body.appendChild(link);
+            link.click();
+            
+            // Clean up
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+        }
+        
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    status.style.display = 'none';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
